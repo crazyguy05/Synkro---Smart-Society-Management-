@@ -95,6 +95,7 @@ npm run dev
 
 Frontend Setup
 
+
 Create frontend/.env.local:
 
 NEXT_PUBLIC_API_BASE=http://localhost:5000
