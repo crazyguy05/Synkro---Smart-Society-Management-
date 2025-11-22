@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0b0f1a;
+  --card: #0f1422;
+  --text: #e6e9ef;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-[var(--bg)] text-[var(--text)];
+}
+
+.btn-glow {
+  @apply bg-brand text-white rounded-md px-4 py-2 shadow-glow hover:shadow-lg transition;
+}
+
+.card {
+  @apply bg-[var(--card)] rounded-xl border border-white/5 shadow-lg;
+}
