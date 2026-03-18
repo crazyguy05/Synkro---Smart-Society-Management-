@@ -53,9 +53,25 @@ export const listUsers = async (req, res) => {
   try {
     const { role } = req.query;
     const q = role ? { role } : {};
-    const users = await User.find(q).select('name email role apartment');
+    const users = await User.find(q).select('name email role apartment areaSqFt');
     return res.json(users);
   } catch (e) {
     return res.status(500).json({ message: 'Failed to list users' });
+  }
+};
+
+// Admin-only: update user fields (e.g. areaSqFt, apartment)
+export const updateUser = async (req, res) => {
+  try {
+    const allowed = ['areaSqFt', 'apartment', 'phone'];
+    const update = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) update[key] = req.body[key];
+    }
+    const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json(user);
+  } catch (e) {
+    return res.status(500).json({ message: 'Failed to update user' });
   }
 };

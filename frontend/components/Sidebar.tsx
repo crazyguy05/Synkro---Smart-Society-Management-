@@ -12,11 +12,13 @@ export default function Sidebar() {
     { href: user?.role === 'resident' ? '/resident/complaints' : '/complaints', label: 'Complaints' },
     { href: user?.role === 'guard' ? '/guard/visitors' : user?.role === 'resident' ? '/resident/visitors' : '/visitors', label: 'Visitors' },
     { href: '/notices', label: 'Notices' },
+    { href: '/polls', label: 'Polls' },
     { href: '/leaderboard', label: 'Leaderboard' },
     { href: '/ai', label: 'AI Suggestion' },
   ];
 
   const adminOnly = [
+    { href: '/admin/polls', label: 'Polls (Admin)' },
     { href: '/admin/complaints', label: 'Complaints (Admin)' },
     { href: '/admin/visitors', label: 'Visitors (Admin)' },
     { href: '/admin/bills', label: 'Bills (Admin)' },

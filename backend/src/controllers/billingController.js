@@ -1,6 +1,64 @@
 import Bill from '../models/bill.js';
 import User from '../models/user.js';
 
+// Stored maintenance rate (in-memory for simplicity, persisted via a simple config approach)
+let _maintenanceRate = 2; // default ₹2 per sq ft
+
+export const getMaintenanceRate = (_req, res) => {
+  res.json({ ratePerSqFt: _maintenanceRate });
+};
+
+export const bulkGenerateMaintenance = async (req, res) => {
+  try {
+    const { ratePerSqFt, dueDate, month } = req.body;
+    if (!ratePerSqFt || ratePerSqFt <= 0) return res.status(400).json({ message: 'Invalid rate' });
+    _maintenanceRate = ratePerSqFt;
+
+    const residents = await User.find({ role: 'resident' });
+    const bills = [];
+    for (const r of residents) {
+      const area = r.areaSqFt || 0;
+      if (area <= 0) continue;
+      const amount = parseFloat((area * ratePerSqFt).toFixed(2));
+      const bill = new Bill({
+        resident: r._id,
+        flatNumber: r.apartment,
+        category: 'Maintenance',
+        description: `Maintenance for ${month || new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} — ${area} sq ft × ₹${ratePerSqFt}/sq ft`,
+        amount,
+        month: month || new Date().toISOString().slice(0, 7),
+        issueDate: new Date(),
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        status: 'Unpaid',
+        generatedBy: req.user.id
+      });
+      await bill.save();
+      bills.push(bill);
+    }
+    res.json({ generated: bills.length, bills });
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to generate maintenance bills' });
+  }
+};
+
+export const previewMaintenance = async (req, res) => {
+  try {
+    const { ratePerSqFt } = req.query;
+    const rate = parseFloat(ratePerSqFt) || _maintenanceRate;
+    const residents = await User.find({ role: 'resident' }).select('name apartment areaSqFt email');
+    const preview = residents.map(r => ({
+      _id: r._id,
+      name: r.name,
+      apartment: r.apartment,
+      areaSqFt: r.areaSqFt || 0,
+      amount: parseFloat(((r.areaSqFt || 0) * rate).toFixed(2))
+    }));
+    res.json({ ratePerSqFt: rate, preview });
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to preview' });
+  }
+};
+
 export const listMyBills = async (req, res) => {
   try {
     let bills = await Bill.find({ resident: req.user.id }).sort('-createdAt');

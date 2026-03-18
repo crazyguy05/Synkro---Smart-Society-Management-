@@ -13,15 +13,19 @@ export default function AdminBillsPage() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [sort, setSort] = useState<'dueDate'|'resident'>('dueDate');
 
+  // Maintenance calculator state
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [rate, setRate] = useState('');
+  const [calcDueDate, setCalcDueDate] = useState('');
+  const [preview, setPreview] = useState<any[]>([]);
+  const [previewing, setPreviewing] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [calcMonth, setCalcMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [savingArea, setSavingArea] = useState<string | null>(null);
+
   const [form, setForm] = useState({
-    residentId: '',
-    residentEmail: '',
-    flatNumber: '',
-    category: 'Maintenance',
-    description: '',
-    amount: '',
-    issueDate: '',
-    dueDate: ''
+    residentId: '', residentEmail: '', flatNumber: '',
+    category: 'Maintenance', description: '', amount: '', issueDate: '', dueDate: ''
   });
 
   const stats = useMemo(() => {
@@ -49,17 +53,60 @@ export default function AdminBillsPage() {
 
   async function fetchUsers() {
     try {
-      // minimal: reusing existing endpoint if present; fallback to auth/me role
-      // If you have /api/users?role=resident, switch to it. For now, get from /api/visitors as placeholder is not ideal, so keep manual input option.
-      const list = await api('/api/auth/users?role=resident'); // admin-only
+      const list = await api('/api/auth/users?role=resident');
       setUsers(Array.isArray(list) ? list : []);
     } catch { setUsers([]); }
+  }
+
+  async function fetchPreview() {
+    if (!rate || Number(rate) <= 0) return;
+    setPreviewing(true);
+    try {
+      const data = await api(`/api/billing/maintenance-preview?ratePerSqFt=${rate}`);
+      setPreview(data.preview);
+    } catch {}
+    finally { setPreviewing(false); }
+  }
+
+  async function saveArea(userId: string, areaSqFt: number) {
+    setSavingArea(userId);
+    try {
+      await api(`/api/auth/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ areaSqFt })
+      });
+      // Recalculate amount for this row
+      setPreview(prev => prev.map(r =>
+        r._id === userId
+          ? { ...r, areaSqFt, amount: parseFloat((areaSqFt * Number(rate)).toFixed(2)) }
+          : r
+      ));
+    } catch {}
+    finally { setSavingArea(null); }
+  }
+
+  async function generateMaintenance() {
+    if (!rate || Number(rate) <= 0) return;
+    setGenerating(true);
+    try {
+      const data = await api('/api/billing/bulk-maintenance', {
+        method: 'POST',
+        body: JSON.stringify({ ratePerSqFt: Number(rate), dueDate: calcDueDate || undefined, month: calcMonth })
+      });
+      alert(`✅ Generated ${data.generated} maintenance bill(s)`);
+      setCalcOpen(false);
+      setPreview([]);
+      fetchData();
+    } catch (e: any) {
+      alert('Failed: ' + e.message);
+    }
+    finally { setGenerating(false); }
   }
 
   const onUserChange = (id: string) => {
     setForm(f => ({ ...f, residentId: id }));
     const u = users.find((u: any) => u._id === id);
-    if (u?.flatNumber) setForm(f => ({ ...f, flatNumber: u.flatNumber }));
+    if (u?.apartment) setForm(f => ({ ...f, flatNumber: u.apartment }));
   };
 
   async function submit(e: React.FormEvent) {
@@ -88,12 +135,12 @@ export default function AdminBillsPage() {
   }
 
   if (user?.role !== 'admin') return (
-    <Shell>
-      <div className="p-6">Only admins can view this page.</div>
-    </Shell>
+    <Shell><div className="p-6">Only admins can view this page.</div></Shell>
   );
 
   const badge = (s: string) => s === 'Paid' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : s === 'Overdue' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+  const totalPreview = preview.reduce((s, r) => s + r.amount, 0);
+  const eligibleCount = preview.filter(r => r.areaSqFt > 0).length;
 
   return (
     <Shell>
@@ -103,6 +150,127 @@ export default function AdminBillsPage() {
           <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Unpaid</div><div className="text-2xl font-semibold">{stats.unpaid}</div></div>
           <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Overdue</div><div className="text-2xl font-semibold">{stats.overdue}</div></div>
           <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Paid</div><div className="text-2xl font-semibold">{stats.paid}</div></div>
+        </div>
+
+        {/* Maintenance Calculator */}
+        <div className="card border border-white/10 bg-white/5 rounded-xl overflow-hidden">
+          <button
+            className="w-full flex justify-between items-center px-4 py-3 font-medium hover:bg-white/5"
+            onClick={() => setCalcOpen(v => !v)}
+          >
+            <span>🧮 Maintenance Calculator (Area-based)</span>
+            <span className="text-xs opacity-60">{calcOpen ? '▲ Hide' : '▼ Expand'}</span>
+          </button>
+
+          {calcOpen && (
+            <div className="px-4 pb-4 grid gap-4 border-t border-white/10">
+              <div className="grid grid-cols-2 gap-3 mt-3 md:grid-cols-4">
+                <div>
+                  <label className="text-xs opacity-60 block mb-1">Rate (₹ per sq ft)</label>
+                  <input
+                    type="number" min="0" step="0.5"
+                    className="w-full px-3 py-2 rounded bg-white/5 border border-white/10"
+                    placeholder="e.g. 2.5"
+                    value={rate}
+                    onChange={e => { setRate(e.target.value); setPreview([]); }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs opacity-60 block mb-1">Month</label>
+                  <input
+                    type="month"
+                    className="w-full px-3 py-2 rounded bg-white/5 border border-white/10"
+                    value={calcMonth}
+                    onChange={e => setCalcMonth(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs opacity-60 block mb-1">Due Date (optional)</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 rounded bg-white/5 border border-white/10"
+                    value={calcDueDate}
+                    onChange={e => setCalcDueDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    className="w-full px-3 py-2 rounded border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                    onClick={fetchPreview}
+                    disabled={previewing || !rate}
+                  >{previewing ? 'Loading…' : 'Preview'}</button>
+                </div>
+              </div>
+
+              {preview.length > 0 && (
+                <div className="grid gap-3">
+                  <p className="text-xs opacity-60">Enter or update each flat's area below. Changes are saved immediately and the amount recalculates automatically.</p>
+                  <div className="overflow-auto rounded border border-white/10">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-white/5">
+                        <tr>
+                          <th className="text-left p-3">Resident</th>
+                          <th className="text-left p-3">Flat</th>
+                          <th className="text-left p-3">Area (sq ft)</th>
+                          <th className="text-left p-3">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.map(r => (
+                          <tr key={r._id} className="border-t border-white/10">
+                            <td className="p-3">{r.name}</td>
+                            <td className="p-3">{r.apartment || '—'}</td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="w-24 px-2 py-1 rounded bg-white/5 border border-white/10 text-sm"
+                                  placeholder="sq ft"
+                                  defaultValue={r.areaSqFt > 0 ? r.areaSqFt : ''}
+                                  onBlur={e => {
+                                    const val = Number(e.target.value);
+                                    if (val > 0 && val !== r.areaSqFt) saveArea(r._id, val);
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      const val = Number((e.target as HTMLInputElement).value);
+                                      if (val > 0 && val !== r.areaSqFt) saveArea(r._id, val);
+                                    }
+                                  }}
+                                />
+                                {savingArea === r._id && <span className="text-xs opacity-50">Saving…</span>}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              {r.areaSqFt > 0
+                                ? <span className="text-emerald-400 font-medium">₹{r.amount}</span>
+                                : <span className="text-yellow-400 text-xs">Enter area first</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-white/5">
+                        <tr>
+                          <td colSpan={3} className="p-3 font-medium">Total</td>
+                          <td className="p-3 font-semibold">₹{totalPreview.toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-xs opacity-50">{eligibleCount} of {preview.length} residents have area set · others will be skipped</p>
+                    <button
+                      className="btn-glow px-4 py-2 rounded"
+                      onClick={generateMaintenance}
+                      disabled={generating || eligibleCount === 0}
+                    >{generating ? 'Generating…' : `Generate ${eligibleCount} Bill${eligibleCount !== 1 ? 's' : ''}`}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between">
@@ -170,7 +338,7 @@ export default function AdminBillsPage() {
                     <select className="px-3 py-2 rounded bg-white/5 border border-white/10" value={form.residentId} onChange={e=>onUserChange(e.target.value)}>
                       <option value="">Select Resident</option>
                       {users.map((u:any)=> (
-                        <option key={u._id} value={u._id}>{u.name} {u.flatNumber ? `(${u.flatNumber})` : ''}</option>
+                        <option key={u._id} value={u._id}>{u.name} {u.apartment ? `(${u.apartment})` : ''}</option>
                       ))}
                     </select>
                     <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Flat Number" value={form.flatNumber} onChange={e=>setForm(f=>({ ...f, flatNumber: e.target.value }))} />

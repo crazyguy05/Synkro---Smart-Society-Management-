@@ -18,12 +18,16 @@ import emergencyRoutes from './routes/emergency.js';
 import panicRoutes from './routes/panic.js';
 import lostFoundRoutes from './routes/lostFound.js';
 import marketplaceRoutes from './routes/marketplace.js';
+import pollRoutes from './routes/polls.js';
 
 dotenv.config();
 
 const app = express();
 app.set('etag', false);
-app.use(cors({ origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], credentials: true }));
+app.use(cors({
+  origin: (origin, cb) => cb(null, true),
+  credentials: true
+}));
 // Increase limits for base64 image uploads to Cloudinary
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -45,6 +49,7 @@ app.use('/api/emergency', emergencyRoutes);
 app.use('/api/panic', panicRoutes);
 app.use('/api/lostfound', lostFoundRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/polls', pollRoutes);
 
 const PORT = process.env.PORT || 5000;
 

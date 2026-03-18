@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const t = localStorage.getItem('token');
     if (t) {
       setToken(t);
-      api('/api/auth/me').then(r => setUser(r.user)).catch(() => {});
+      api('/api/auth/me').then(r => setUser({ ...r.user, id: r.user.id ?? r.user._id })).catch(() => {});
     }
   }, []);
 

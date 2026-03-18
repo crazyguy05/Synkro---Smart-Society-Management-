@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 :root {
+  --bg: #ffffff;
+  --card: #f3f4f6;
+  --text: #111827;
+}
+
+html.dark {
   --bg: #0b0f1a;
   --card: #0f1422;
   --text: #e6e9ef;
@@ -13,7 +19,7 @@ html {
 }
 
 body {
-  @apply bg-[var(--bg)] text-[var(--text)];
+  @apply bg-[var(--bg)] text-[var(--text)] transition-colors duration-200;
 }
 
 .btn-glow {
@@ -21,5 +27,5 @@ body {
 }
 
 .card {
-  @apply bg-[var(--card)] rounded-xl border border-white/5 shadow-lg;
+  @apply bg-[var(--card)] rounded-xl border border-black/10 dark:border-white/5 shadow-lg;
 }
