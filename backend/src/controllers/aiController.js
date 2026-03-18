@@ -2,33 +2,79 @@ import OpenAI from 'openai';
 import axios from 'axios';
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const HF_MODEL_ENV = process.env.HUGGINGFACE_MODEL || 'google/flan-t5-small';
-const MODEL_URL = `https://api-inference.huggingface.co/models/${encodeURIComponent(HF_MODEL_ENV)}`;
-const HF_TIMEOUT_MS = Number(process.env.HUGGINGFACE_TIMEOUT_MS || 60000);
 
-async function callHFWithRetry(prompt, genParams = { max_new_tokens: 60, return_full_text: false, temperature: 0.8, top_p: 0.95 }) {
-  const HF_KEY = process.env.HUGGINGFACE_API_KEY;
-  if (!HF_KEY) return null;
-  const maxAttempts = 3; // ~ up to ~60-90s total with waits
-  const waits = [15000, 20000];
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
+const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 60000);
+
+const SYSTEM_PROMPT = `You are an experienced housing society operations manager with 20 years of field experience. A resident has filed a complaint. Your job is to give the admin a PRACTICAL, SPECIFIC action plan — not generic advice like "call an expert" (that is obvious).
+
+Your suggestion MUST include:
+1. An immediate safety or containment step residents/staff should take RIGHT NOW (before any expert arrives)
+2. A specific operational action — mention WHO on the society staff should do WHAT, and any equipment/supply needed
+3. A preventive follow-up to stop recurrence
+
+Be direct, technical, and specific. Mention exact things like "turn off the MCB for that floor", "check the earthing at the DB box", "use a voltage tester", "post a notice on the wing notice board", "check CCTV footage from camera #X near the area", etc.
+
+NEVER say generic things like "call electrician", "contact plumber", "inform maintenance" — those are obvious. Focus on what the ADMIN and STAFF can do operationally.
+
+Respond with ONLY a JSON object (no markdown, no code fences, no extra text):
+{"urgency":"low|medium|high","suggestion":"your detailed specific suggestion here (2-3 sentences max)"}`;
+
+const COMPLAINT_PROMPTS = [
+  (text) => `Complaint from resident: "${text}"\n\nWhat specific steps should the society admin and staff take? Be practical and specific — do NOT give generic advice.`,
+  (text) => `Resident reported: "${text}"\n\nAs an experienced society manager, what exact operational steps would you take? Include specific safety actions, not just "call an expert".`,
+  (text) => `Issue filed: "${text}"\n\nGive a field-level action plan. What should staff do immediately, what equipment/checks are needed, and how to prevent this from recurring?`,
+];
+
+function pickPrompt(text) {
+  return COMPLAINT_PROMPTS[Math.floor(Math.random() * COMPLAINT_PROMPTS.length)](text);
+}
+
+function parseResponse(raw) {
+  const trimmed = (raw || '').trim();
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed.suggestion && parsed.urgency) return parsed;
+  } catch { /* not pure JSON, try to extract */ }
+
+  const jsonMatch = trimmed.match(/\{[\s\S]*?"urgency"\s*:\s*"[^"]+?"[\s\S]*?"suggestion"\s*:\s*"[^"]*?"[\s\S]*?\}/);
+  if (jsonMatch) {
     try {
-      let { data } = await axios.post(
-        MODEL_URL,
-        { inputs: prompt, parameters: genParams, options: { wait_for_model: true } },
-        { headers: { Authorization: `Bearer ${HF_KEY}` }, timeout: HF_TIMEOUT_MS }
-      );
-      return { ok: true, data };
-    } catch (err) {
-      const msg = err?.response?.data?.error || err?.message || '';
-      const isLoading = /currently loading|please try again/i.test(msg);
-      if (attempt < maxAttempts && isLoading) {
-        const waitMs = waits[attempt - 1] || 15000;
-        await new Promise(r => setTimeout(r, waitMs));
-        continue;
-      }
-      return { ok: false, error: msg };
-    }
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.suggestion && parsed.urgency) return parsed;
+    } catch { /* fall through */ }
+  }
+
+  const urgencyMatch = /\b(high|medium|low)\b/i.exec(trimmed);
+  return {
+    urgency: (urgencyMatch?.[1] || 'medium').toLowerCase(),
+    suggestion: trimmed.replace(/```json|```/g, '').trim().slice(0, 500) || 'Schedule maintenance and monitor the issue.',
+  };
+}
+
+async function callOllama(complaintText) {
+  try {
+    const { data } = await axios.post(
+      `${OLLAMA_BASE}/api/chat`,
+      {
+        model: OLLAMA_MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: pickPrompt(complaintText) },
+        ],
+        stream: false,
+        options: { temperature: 0.7, num_predict: 300 },
+      },
+      { timeout: OLLAMA_TIMEOUT_MS }
+    );
+    const raw = data?.message?.content;
+    if (!raw) return null;
+    return { ok: true, ...parseResponse(raw) };
+  } catch (err) {
+    console.error('Ollama error:', err?.message || err);
+    return null;
   }
 }
 
@@ -40,43 +86,29 @@ export const suggestForComplaint = async (req, res) => {
       : [category, description].filter(Boolean).join('. ').trim();
     if (!combined || combined.length < 5) return res.status(400).json({ error: 'Provide complaint text or category and description' });
 
-    // 1) Prefer Hugging Face if configured with guided and slightly randomized prompts
-    const prompts = [
-      `Resident issue: ${combined}. Give a short, specific, and polite action plan with urgency (low/medium/high). Return both in plain text.`,
-      `Problem: ${combined}. Respond as a professional society manager with one immediate step and an urgency (low/medium/high). Keep it concise.`,
-      `Situation: ${combined}. Suggest one immediate step staff should take and classify urgency (low/medium/high).`
-    ];
-    const chosenPrompt = prompts[Math.floor(Math.random() * prompts.length)];
-    const genParams = { max_new_tokens: 60, return_full_text: false, temperature: 0.8, top_p: 0.95 };
-    const hfResult = await callHFWithRetry(chosenPrompt, genParams);
-    if (hfResult && hfResult.ok) {
-      const data = hfResult.data;
-      let generated = '';
-      if (Array.isArray(data) && data[0]?.generated_text) {
-        generated = data[0].generated_text;
-      } else if (data?.generated_text) {
-        generated = data.generated_text;
-      } else if (typeof data === 'string') {
-        generated = data;
-      }
-      const urgencyMatch = /\b(high|medium|low)\b/i.exec(generated) || [];
-      const urgency = (urgencyMatch[1] || 'medium').toLowerCase();
-      const suggestion = generated?.trim()?.slice(0, 500) || 'Schedule maintenance and monitor the issue.';
-      return res.json({ urgency, suggestion, provider: 'huggingface', model: HF_MODEL_ENV });
+    // 1) Ollama (local)
+    const ollamaResult = await callOllama(combined);
+    if (ollamaResult?.ok) {
+      return res.json({
+        urgency: ollamaResult.urgency,
+        suggestion: ollamaResult.suggestion,
+        provider: 'ollama',
+        model: OLLAMA_MODEL,
+      });
     }
 
-    // 2) Try OpenAI if configured
+    // 2) OpenAI fallback
     if (openai) {
       try {
         const prompt = `You are a society manager assistant. For the following complaint, provide a concise suggestion and an urgency (low/medium/high). Complaint: ${combined}`;
         const completion = await openai.responses.create({
           model: 'gpt-4o-mini',
           input: prompt,
-          temperature: 0.6
+          temperature: 0.6,
         });
-        const text = completion.output_text || '';
-        let parsed = { suggestion: text.slice(0, 200), urgency: 'medium' };
-        try { parsed = JSON.parse(text); } catch {}
+        const raw = completion.output_text || '';
+        let parsed = { suggestion: raw.slice(0, 200), urgency: 'medium' };
+        try { parsed = JSON.parse(raw); } catch { /* use raw text */ }
         return res.json({ ...parsed, provider: 'openai', model: 'gpt-4o-mini' });
       } catch (_) {
         // fall through to static

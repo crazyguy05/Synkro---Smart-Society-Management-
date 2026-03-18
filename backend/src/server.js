@@ -5,7 +5,6 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import os from 'os';
-import axios from 'axios';
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/auth.js';
 import complaintRoutes from './routes/complaints.js';
@@ -49,21 +48,8 @@ app.use('/api/marketplace', marketplaceRoutes);
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
-  app.listen(PORT, async () => {
+  app.listen(PORT, () => {
     console.log(`API running on port ${PORT}`);
-    // Pre-warm Hugging Face model if configured
-    try {
-      if (process.env.HUGGINGFACE_API_KEY && process.env.HUGGINGFACE_MODEL) {
-        await axios.post(
-          `https://router.huggingface.co/hf-inference/models/${encodeURIComponent(process.env.HUGGINGFACE_MODEL)}`,
-          { inputs: 'warm up', options: { wait_for_model: true } },
-          { headers: { Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}` } }
-        );
-        console.log('🔥 Hugging Face model warmed up');
-      }
-    } catch (err) {
-      console.log('HF warm-up skipped:', err?.response?.data?.error || err?.message || 'unknown error');
-    }
   });
 }).catch((err) => {
   console.error('DB connection failed', err);

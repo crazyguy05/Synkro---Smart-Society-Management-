@@ -13,6 +13,7 @@ export default function Sidebar() {
     { href: user?.role === 'guard' ? '/guard/visitors' : user?.role === 'resident' ? '/resident/visitors' : '/visitors', label: 'Visitors' },
     { href: '/notices', label: 'Notices' },
     { href: '/leaderboard', label: 'Leaderboard' },
+    { href: '/meetings', label: 'Meetings' },
     { href: '/ai', label: 'AI Suggestion' },
   ];
 
