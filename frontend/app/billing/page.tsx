@@ -3,6 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import Shell from '../../components/Shell';
 import { api } from '../../lib/api';
 
+const getBillAmount = (b: any) =>
+  Number(b.amount ?? ((b.maintenance || 0) + (b.electricity || 0) + (b.water || 0))) || 0;
+
 export default function BillingPage() {
   const [bills, setBills] = useState<any[]>([]);
   const fetchBills = async () => { try { setBills(await api('/api/billing/me')); } catch {} };
@@ -15,7 +18,7 @@ export default function BillingPage() {
     const unpaid = bills.filter(b => b.status === 'Unpaid').length;
     const totalDue = bills
       .filter(b => b.status !== 'Paid')
-      .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+      .reduce((sum, b) => sum + getBillAmount(b), 0);
     return { total, paid, overdue, unpaid, totalDue };
   }, [bills]);
 
@@ -49,7 +52,7 @@ export default function BillingPage() {
                   <tr key={b._id} className="border-t border-white/10">
                     <td className="p-3">{b.billId || '—'}</td>
                     <td className="p-3">{b.category || '—'}</td>
-                    <td className="p-3">₹{b.amount?.toFixed?.(2) ?? b.amount}</td>
+                    <td className="p-3">₹{getBillAmount(b).toFixed(2)}</td>
                     <td className="p-3">{b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '—'}</td>
                     <td className="p-3"><span className={`px-2 py-1 rounded border ${badge(b.status)}`}>{b.status}</span></td>
                   </tr>
