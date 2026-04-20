@@ -1,19 +1,23 @@
 "use client";
 import { useEffect, useMemo, useState } from 'react';
+import { Plus, Calculator, Receipt, CreditCard, RefreshCw } from 'lucide-react';
 import Shell from '../../../components/Shell';
+import Card from '../../../components/ui/Card';
+import Badge, { statusTone } from '../../../components/ui/Badge';
+import Button from '../../../components/ui/Button';
+import Input from '../../../components/ui/Input';
+import Modal from '../../../components/ui/Modal';
+import EmptyState from '../../../components/ui/EmptyState';
 import { api } from '../../../lib/api';
-import { useAuth } from '../../../lib/auth';
 
 export default function AdminBillsPage() {
-  const { user } = useAuth();
   const [bills, setBills] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('');
-  const [sort, setSort] = useState<'dueDate'|'resident'>('dueDate');
+  const [sort, setSort] = useState<'dueDate' | 'resident'>('dueDate');
 
-  // Maintenance calculator state
   const [calcOpen, setCalcOpen] = useState(false);
   const [rate, setRate] = useState('');
   const [calcDueDate, setCalcDueDate] = useState('');
@@ -25,7 +29,7 @@ export default function AdminBillsPage() {
 
   const [form, setForm] = useState({
     residentId: '', residentEmail: '', flatNumber: '',
-    category: 'Maintenance', description: '', amount: '', issueDate: '', dueDate: ''
+    category: 'Maintenance', description: '', amount: '', issueDate: '', dueDate: '',
   });
 
   const stats = useMemo(() => {
@@ -36,72 +40,58 @@ export default function AdminBillsPage() {
     return { total, paid, overdue, unpaid };
   }, [bills]);
 
-  useEffect(() => {
-    if (user?.role !== 'admin') return;
-    fetchData();
-    fetchUsers();
-  }, [user, filterStatus, sort]);
+  useEffect(() => { fetchData(); fetchUsers(); }, [filterStatus, sort]);
 
-  async function fetchData() {
+  const fetchData = async () => {
     try {
       let url = `/api/billing?`;
       if (filterStatus) url += `status=${filterStatus}&`;
       if (sort) url += `sort=${sort}`;
       setBills(await api(url));
     } catch {}
-  }
+  };
 
-  async function fetchUsers() {
+  const fetchUsers = async () => {
     try {
       const list = await api('/api/auth/users?role=resident');
       setUsers(Array.isArray(list) ? list : []);
     } catch { setUsers([]); }
-  }
+  };
 
-  async function fetchPreview() {
+  const fetchPreview = async () => {
     if (!rate || Number(rate) <= 0) return;
     setPreviewing(true);
     try {
       const data = await api(`/api/billing/maintenance-preview?ratePerSqFt=${rate}`);
       setPreview(data.preview);
-    } catch {}
-    finally { setPreviewing(false); }
-  }
+    } catch {} finally { setPreviewing(false); }
+  };
 
-  async function saveArea(userId: string, areaSqFt: number) {
+  const saveArea = async (userId: string, areaSqFt: number) => {
     setSavingArea(userId);
     try {
-      await api(`/api/auth/users/${userId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ areaSqFt })
-      });
-      // Recalculate amount for this row
+      await api(`/api/auth/users/${userId}`, { method: 'PATCH', body: JSON.stringify({ areaSqFt }) });
       setPreview(prev => prev.map(r =>
-        r._id === userId
-          ? { ...r, areaSqFt, amount: parseFloat((areaSqFt * Number(rate)).toFixed(2)) }
-          : r
+        r._id === userId ? { ...r, areaSqFt, amount: parseFloat((areaSqFt * Number(rate)).toFixed(2)) } : r,
       ));
-    } catch {}
-    finally { setSavingArea(null); }
-  }
+    } catch {} finally { setSavingArea(null); }
+  };
 
-  async function generateMaintenance() {
+  const generateMaintenance = async () => {
     if (!rate || Number(rate) <= 0) return;
     setGenerating(true);
     try {
       const data = await api('/api/billing/bulk-maintenance', {
         method: 'POST',
-        body: JSON.stringify({ ratePerSqFt: Number(rate), dueDate: calcDueDate || undefined, month: calcMonth })
+        body: JSON.stringify({ ratePerSqFt: Number(rate), dueDate: calcDueDate || undefined, month: calcMonth }),
       });
-      alert(`✅ Generated ${data.generated} maintenance bill(s)`);
-      setCalcOpen(false);
-      setPreview([]);
+      alert(`Generated ${data.generated} maintenance bill(s)`);
+      setCalcOpen(false); setPreview([]);
       fetchData();
     } catch (e: any) {
       alert('Failed: ' + e.message);
-    }
-    finally { setGenerating(false); }
-  }
+    } finally { setGenerating(false); }
+  };
 
   const onUserChange = (id: string) => {
     setForm(f => ({ ...f, residentId: id }));
@@ -109,270 +99,258 @@ export default function AdminBillsPage() {
     if (u?.apartment) setForm(f => ({ ...f, flatNumber: u.apartment }));
   };
 
-  async function submit(e: React.FormEvent) {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!form.residentId && !form.residentEmail) || !form.category || !form.amount) return;
     setLoading(true);
     try {
-      await api('/api/billing/new', { method: 'POST', body: JSON.stringify({
-        residentId: form.residentId || undefined,
-        residentEmail: form.residentEmail || undefined,
-        flatNumber: form.flatNumber || undefined,
-        category: form.category,
-        description: form.description,
-        amount: Number(form.amount),
-        issueDate: form.issueDate || undefined,
-        dueDate: form.dueDate || undefined
-      })});
+      await api('/api/billing/new', {
+        method: 'POST',
+        body: JSON.stringify({
+          residentId: form.residentId || undefined,
+          residentEmail: form.residentEmail || undefined,
+          flatNumber: form.flatNumber || undefined,
+          category: form.category,
+          description: form.description,
+          amount: Number(form.amount),
+          issueDate: form.issueDate || undefined,
+          dueDate: form.dueDate || undefined,
+        }),
+      });
       setOpen(false);
       setForm({ residentId: '', residentEmail: '', flatNumber: '', category: 'Maintenance', description: '', amount: '', issueDate: '', dueDate: '' });
       fetchData();
     } finally { setLoading(false); }
-  }
+  };
 
-  async function markPaid(id: string) {
+  const markPaid = async (id: string) => {
     try { await api(`/api/billing/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'Paid' }) }); fetchData(); } catch {}
-  }
+  };
 
-  if (user?.role !== 'admin') return (
-    <Shell><div className="p-6">Only admins can view this page.</div></Shell>
-  );
-
-  const badge = (s: string) => s === 'Paid' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : s === 'Overdue' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
   const totalPreview = preview.reduce((s, r) => s + r.amount, 0);
   const eligibleCount = preview.filter(r => r.areaSqFt > 0).length;
 
   return (
     <Shell>
-      <div className="grid gap-6">
-        <div className="grid grid-cols-4 gap-3">
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Total</div><div className="text-2xl font-semibold">{stats.total}</div></div>
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Unpaid</div><div className="text-2xl font-semibold">{stats.unpaid}</div></div>
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Overdue</div><div className="text-2xl font-semibold">{stats.overdue}</div></div>
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Paid</div><div className="text-2xl font-semibold">{stats.paid}</div></div>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="heading text-2xl">Bills Management</h2>
+          <p className="text-sm text-muted">Generate maintenance and custom bills for residents.</p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" leftIcon={<Calculator size={15} />} onClick={() => setCalcOpen(true)}>Maintenance Calculator</Button>
+          <Button leftIcon={<Plus size={15} />} onClick={() => setOpen(true)}>New Bill</Button>
+        </div>
+      </div>
 
-        {/* Maintenance Calculator */}
-        <div className="card border border-white/10 bg-white/5 rounded-xl overflow-hidden">
-          <button
-            className="w-full flex justify-between items-center px-4 py-3 font-medium hover:bg-white/5"
-            onClick={() => setCalcOpen(v => !v)}
-          >
-            <span>🧮 Maintenance Calculator (Area-based)</span>
-            <span className="text-xs opacity-60">{calcOpen ? '▲ Hide' : '▼ Expand'}</span>
-          </button>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Stat label="Total" value={stats.total} tone="brand" />
+        <Stat label="Unpaid" value={stats.unpaid} tone="amber" />
+        <Stat label="Overdue" value={stats.overdue} tone="rose" />
+        <Stat label="Paid" value={stats.paid} tone="emerald" />
+      </div>
 
-          {calcOpen && (
-            <div className="px-4 pb-4 grid gap-4 border-t border-white/10">
-              <div className="grid grid-cols-2 gap-3 mt-3 md:grid-cols-4">
-                <div>
-                  <label className="text-xs opacity-60 block mb-1">Rate (₹ per sq ft)</label>
-                  <input
-                    type="number" min="0" step="0.5"
-                    className="w-full px-3 py-2 rounded bg-white/5 border border-white/10"
-                    placeholder="e.g. 2.5"
-                    value={rate}
-                    onChange={e => { setRate(e.target.value); setPreview([]); }}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs opacity-60 block mb-1">Month</label>
-                  <input
-                    type="month"
-                    className="w-full px-3 py-2 rounded bg-white/5 border border-white/10"
-                    value={calcMonth}
-                    onChange={e => setCalcMonth(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs opacity-60 block mb-1">Due Date (optional)</label>
-                  <input
-                    type="date"
-                    className="w-full px-3 py-2 rounded bg-white/5 border border-white/10"
-                    value={calcDueDate}
-                    onChange={e => setCalcDueDate(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    className="w-full px-3 py-2 rounded border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-                    onClick={fetchPreview}
-                    disabled={previewing || !rate}
-                  >{previewing ? 'Loading…' : 'Preview'}</button>
-                </div>
+      <Card className="p-4">
+        <div className="flex gap-3 flex-wrap">
+          <select className="input w-auto" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="Unpaid">Unpaid</option>
+            <option value="Overdue">Overdue</option>
+            <option value="Paid">Paid</option>
+          </select>
+          <select className="input w-auto" value={sort} onChange={e => setSort(e.target.value as any)}>
+            <option value="dueDate">Sort: Due Date</option>
+            <option value="resident">Sort: Resident</option>
+          </select>
+          <Button variant="ghost" size="sm" leftIcon={<RefreshCw size={13} />} onClick={fetchData}>Refresh</Button>
+        </div>
+      </Card>
+
+      {bills.length === 0 ? (
+        <EmptyState icon={<Receipt size={22} />} title="No bills" description="Create maintenance bills or add one manually." />
+      ) : (
+        <Card className="p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-[var(--card-muted)] text-muted text-xs uppercase tracking-wider">
+                <tr>
+                  <th className="text-left px-4 py-3">Bill ID</th>
+                  <th className="text-left px-4 py-3">Flat</th>
+                  <th className="text-left px-4 py-3">Resident</th>
+                  <th className="text-left px-4 py-3">Category</th>
+                  <th className="text-right px-4 py-3">Amount</th>
+                  <th className="text-left px-4 py-3">Due</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-right px-4 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {bills.map(b => (
+                  <tr key={b._id} className="hover:bg-white/5 transition">
+                    <td className="px-4 py-2.5 font-mono text-xs">{b.billId || '—'}</td>
+                    <td className="px-4 py-2.5">{b.flatNumber || '—'}</td>
+                    <td className="px-4 py-2.5">{b.resident?.name || '—'}</td>
+                    <td className="px-4 py-2.5">{b.category}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold">₹{(+b.amount).toLocaleString('en-IN')}</td>
+                    <td className="px-4 py-2.5 text-muted">{b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-2.5"><Badge tone={statusTone(b.status)}>{b.status}</Badge></td>
+                    <td className="px-4 py-2.5 text-right">
+                      {b.status !== 'Paid' && (
+                        <Button size="sm" variant="ghost" leftIcon={<CreditCard size={13} />} onClick={() => markPaid(b._id)}>Mark Paid</Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* New bill */}
+      <Modal
+        open={open} onClose={() => !loading && setOpen(false)} title="Add New Bill" size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+            <Button onClick={submit} loading={loading} disabled={(!form.residentId && !form.residentEmail) || !form.amount}>Save Bill</Button>
+          </>
+        }
+      >
+        <form onSubmit={submit} className="space-y-3">
+          {users.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted">Resident</label>
+                <select className="input" value={form.residentId} onChange={e => onUserChange(e.target.value)}>
+                  <option value="">Select Resident</option>
+                  {users.map((u: any) => (
+                    <option key={u._id} value={u._id}>{u.name} {u.apartment ? `(${u.apartment})` : ''}</option>
+                  ))}
+                </select>
               </div>
-
-              {preview.length > 0 && (
-                <div className="grid gap-3">
-                  <p className="text-xs opacity-60">Enter or update each flat's area below. Changes are saved immediately and the amount recalculates automatically.</p>
-                  <div className="overflow-auto rounded border border-white/10">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-white/5">
-                        <tr>
-                          <th className="text-left p-3">Resident</th>
-                          <th className="text-left p-3">Flat</th>
-                          <th className="text-left p-3">Area (sq ft)</th>
-                          <th className="text-left p-3">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.map(r => (
-                          <tr key={r._id} className="border-t border-white/10">
-                            <td className="p-3">{r.name}</td>
-                            <td className="p-3">{r.apartment || '—'}</td>
-                            <td className="p-3">
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="w-24 px-2 py-1 rounded bg-white/5 border border-white/10 text-sm"
-                                  placeholder="sq ft"
-                                  defaultValue={r.areaSqFt > 0 ? r.areaSqFt : ''}
-                                  onBlur={e => {
-                                    const val = Number(e.target.value);
-                                    if (val > 0 && val !== r.areaSqFt) saveArea(r._id, val);
-                                  }}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                      const val = Number((e.target as HTMLInputElement).value);
-                                      if (val > 0 && val !== r.areaSqFt) saveArea(r._id, val);
-                                    }
-                                  }}
-                                />
-                                {savingArea === r._id && <span className="text-xs opacity-50">Saving…</span>}
-                              </div>
-                            </td>
-                            <td className="p-3">
-                              {r.areaSqFt > 0
-                                ? <span className="text-emerald-400 font-medium">₹{r.amount}</span>
-                                : <span className="text-yellow-400 text-xs">Enter area first</span>
-                              }
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-white/5">
-                        <tr>
-                          <td colSpan={3} className="p-3 font-medium">Total</td>
-                          <td className="p-3 font-semibold">₹{totalPreview.toFixed(2)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-xs opacity-50">{eligibleCount} of {preview.length} residents have area set · others will be skipped</p>
-                    <button
-                      className="btn-glow px-4 py-2 rounded"
-                      onClick={generateMaintenance}
-                      disabled={generating || eligibleCount === 0}
-                    >{generating ? 'Generating…' : `Generate ${eligibleCount} Bill${eligibleCount !== 1 ? 's' : ''}`}</button>
-                  </div>
-                </div>
-              )}
+              <Input label="Flat Number" value={form.flatNumber} onChange={e => setForm(f => ({ ...f, flatNumber: e.target.value }))} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Resident Email" value={form.residentEmail} onChange={e => setForm(f => ({ ...f, residentEmail: e.target.value }))} />
+              <Input label="Flat Number" value={form.flatNumber} onChange={e => setForm(f => ({ ...f, flatNumber: e.target.value }))} />
             </div>
           )}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            <select className="px-3 py-2 rounded bg-white/5 border border-white/10" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
-              <option value="">All</option>
-              <option value="Unpaid">Unpaid</option>
-              <option value="Overdue">Overdue</option>
-              <option value="Paid">Paid</option>
-            </select>
-            <select className="px-3 py-2 rounded bg-white/5 border border-white/10" value={sort} onChange={e=>setSort(e.target.value as any)}>
-              <option value="dueDate">Sort by Due Date</option>
-              <option value="resident">Sort by Resident</option>
-            </select>
-          </div>
-          <button className="btn-glow px-3 py-2 rounded" onClick={()=>setOpen(true)}>Add New Bill</button>
-        </div>
-
-        <div className="overflow-auto rounded border border-white/10">
-          <table className="min-w-full text-sm">
-            <thead className="bg-white/5">
-              <tr>
-                <th className="text-left p-3">Bill ID</th>
-                <th className="text-left p-3">Flat</th>
-                <th className="text-left p-3">Resident</th>
-                <th className="text-left p-3">Category</th>
-                <th className="text-left p-3">Amount</th>
-                <th className="text-left p-3">Due Date</th>
-                <th className="text-left p-3">Status</th>
-                <th className="text-left p-3">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bills.map(b => (
-                <tr key={b._id} className="border-t border-white/10">
-                  <td className="p-3">{b.billId || '—'}</td>
-                  <td className="p-3">{b.flatNumber || '—'}</td>
-                  <td className="p-3">{b.resident?.name || '—'}</td>
-                  <td className="p-3">{b.category || '—'}</td>
-                  <td className="p-3">₹{b.amount?.toFixed?.(2) ?? b.amount}</td>
-                  <td className="p-3">{b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '—'}</td>
-                  <td className="p-3"><span className={`px-2 py-1 rounded border ${badge(b.status)}`}>{b.status}</span></td>
-                  <td className="p-3">
-                    {b.status !== 'Paid' && (
-                      <button className="px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10" onClick={()=>markPaid(b._id)}>Mark Paid</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {bills.length === 0 && (
-                <tr><td className="p-4 opacity-70" colSpan={8}>No bills found.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {open && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60" onClick={()=>!loading && setOpen(false)} />
-            <div className="relative z-50 w-full max-w-xl card p-5 border border-white/10 bg-white/5 rounded-xl">
-              <h3 className="font-medium mb-3">Add New Bill</h3>
-              <form onSubmit={submit} className="grid gap-3">
-                {users.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <select className="px-3 py-2 rounded bg-white/5 border border-white/10" value={form.residentId} onChange={e=>onUserChange(e.target.value)}>
-                      <option value="">Select Resident</option>
-                      {users.map((u:any)=> (
-                        <option key={u._id} value={u._id}>{u.name} {u.apartment ? `(${u.apartment})` : ''}</option>
-                      ))}
-                    </select>
-                    <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Flat Number" value={form.flatNumber} onChange={e=>setForm(f=>({ ...f, flatNumber: e.target.value }))} />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Resident Email" value={form.residentEmail} onChange={e=>setForm(f=>({ ...f, residentEmail: e.target.value }))} />
-                    <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Flat Number (optional)" value={form.flatNumber} onChange={e=>setForm(f=>({ ...f, flatNumber: e.target.value }))} />
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-3">
-                  <select className="px-3 py-2 rounded bg-white/5 border border-white/10" value={form.category} onChange={e=>setForm(f=>({ ...f, category: e.target.value }))}>
-                    <option>Maintenance</option>
-                    <option>Water</option>
-                    <option>Electricity</option>
-                    <option>Parking</option>
-                    <option>Misc</option>
-                  </select>
-                  <input type="number" className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Amount" value={form.amount} onChange={e=>setForm(f=>({ ...f, amount: e.target.value }))} />
-                </div>
-                <textarea className="px-3 py-2 rounded bg-white/5 border border-white/10 min-h-[100px]" placeholder="Description" value={form.description} onChange={e=>setForm(f=>({ ...f, description: e.target.value }))} />
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="date" className="px-3 py-2 rounded bg-white/5 border border-white/10" value={form.issueDate} onChange={e=>setForm(f=>({ ...f, issueDate: e.target.value }))} />
-                  <input type="date" className="px-3 py-2 rounded bg-white/5 border border-white/10" value={form.dueDate} onChange={e=>setForm(f=>({ ...f, dueDate: e.target.value }))} />
-                </div>
-                <div className="flex justify-end gap-2 mt-2">
-                  <button type="button" className="px-3 py-2 rounded border border-white/10 bg-white/5" onClick={()=>setOpen(false)} disabled={loading}>Cancel</button>
-                  <button className="btn-glow px-3 py-2 rounded" disabled={loading || (!form.residentId && !form.residentEmail) || !form.amount}>{loading ? 'Saving…' : 'Save Bill'}</button>
-                </div>
-              </form>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted">Category</label>
+              <select className="input" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                <option>Maintenance</option><option>Water</option><option>Electricity</option><option>Parking</option><option>Misc</option>
+              </select>
             </div>
+            <Input label="Amount (₹)" type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted">Description</label>
+            <textarea className="input min-h-[80px]" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Issue Date" type="date" value={form.issueDate} onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))} />
+            <Input label="Due Date" type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+          </div>
+        </form>
+      </Modal>
+
+      {/* Maintenance calculator */}
+      <Modal
+        open={calcOpen} onClose={() => !generating && setCalcOpen(false)} title="Maintenance Calculator" size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCalcOpen(false)} disabled={generating}>Close</Button>
+            {preview.length > 0 && (
+              <Button loading={generating} disabled={eligibleCount === 0} onClick={generateMaintenance}>
+                Generate {eligibleCount} bill{eligibleCount !== 1 ? 's' : ''}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Input label="Rate (₹/sq ft)" type="number" value={rate} onChange={e => { setRate(e.target.value); setPreview([]); }} placeholder="e.g. 2.5" />
+          <Input label="Month" type="month" value={calcMonth} onChange={e => setCalcMonth(e.target.value)} />
+          <Input label="Due Date" type="date" value={calcDueDate} onChange={e => setCalcDueDate(e.target.value)} />
+          <div className="flex items-end">
+            <Button className="w-full" variant="ghost" loading={previewing} onClick={fetchPreview} disabled={!rate}>Preview</Button>
+          </div>
+        </div>
+
+        {preview.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-muted">Enter each flat's area. Amount recalculates automatically.</p>
+            <div className="rounded-xl border border-[var(--border)] overflow-hidden">
+              <table className="min-w-full text-sm">
+                <thead className="bg-[var(--card-muted)] text-muted text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="text-left px-4 py-2.5">Resident</th>
+                    <th className="text-left px-4 py-2.5">Flat</th>
+                    <th className="text-left px-4 py-2.5">Area (sq ft)</th>
+                    <th className="text-right px-4 py-2.5">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {preview.map(r => (
+                    <tr key={r._id}>
+                      <td className="px-4 py-2">{r.name}</td>
+                      <td className="px-4 py-2">{r.apartment || '—'}</td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number" min="0"
+                            className="w-24 px-2 py-1 rounded bg-[var(--card-muted)] border border-[var(--border)] text-sm"
+                            placeholder="sq ft"
+                            defaultValue={r.areaSqFt > 0 ? r.areaSqFt : ''}
+                            onBlur={e => {
+                              const val = Number(e.target.value);
+                              if (val > 0 && val !== r.areaSqFt) saveArea(r._id, val);
+                            }}
+                          />
+                          {savingArea === r._id && <span className="text-xs text-muted">Saving…</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        {r.areaSqFt > 0
+                          ? <span className="text-emerald-400 font-semibold">₹{r.amount}</span>
+                          : <span className="text-amber-400 text-xs">Enter area</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-[var(--card-muted)]">
+                  <tr>
+                    <td colSpan={3} className="px-4 py-2.5 font-medium">Total</td>
+                    <td className="px-4 py-2.5 text-right font-bold">₹{totalPreview.toFixed(2)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <p className="text-xs text-muted">{eligibleCount} of {preview.length} residents have area set. Others will be skipped.</p>
           </div>
         )}
-      </div>
+      </Modal>
     </Shell>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'emerald' | 'amber' | 'rose' }) {
+  const bg: Record<string, string> = {
+    brand: 'bg-brand-500/10 text-brand-400',
+    emerald: 'bg-emerald-500/10 text-emerald-400',
+    amber: 'bg-amber-500/10 text-amber-400',
+    rose: 'bg-rose-500/10 text-rose-400',
+  };
+  return (
+    <div className="card p-4">
+      <div className={`h-9 w-9 rounded-xl grid place-items-center mb-3 ${bg[tone]}`}>
+        <Receipt size={17} />
+      </div>
+      <div className="text-xs text-muted">{label}</div>
+      <div className="heading text-2xl mt-0.5">{value}</div>
+    </div>
   );
 }

@@ -60,6 +60,18 @@ export const listUsers = async (req, res) => {
   }
 };
 
+// Any authenticated member: directory of staff/guards/admins for emergency contacts
+export const getDirectory = async (_req, res) => {
+  try {
+    const users = await User.find({ role: { $in: ['guard', 'staff', 'admin'] } })
+      .select('name email role phone apartment')
+      .sort({ role: 1, name: 1 });
+    return res.json(users);
+  } catch (e) {
+    return res.status(500).json({ message: 'Failed to load directory' });
+  }
+};
+
 // Admin-only: update user fields (e.g. areaSqFt, apartment)
 export const updateUser = async (req, res) => {
   try {

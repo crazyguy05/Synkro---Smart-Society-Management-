@@ -1,16 +1,26 @@
 "use client";
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Plus, Megaphone, Calendar } from 'lucide-react';
 import Shell from '../../components/Shell';
+import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import Modal from '../../components/ui/Modal';
+import EmptyState from '../../components/ui/EmptyState';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
+type Notice = { _id: string; title: string; body: string; createdAt: string; postedBy?: { name?: string } };
+
 export default function NoticesPage() {
   const { user } = useAuth();
-  const [list, setList] = useState<any[]>([]);
+  const [list, setList] = useState<Notice[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
   const fetchList = async () => { try { setList(await api('/api/notices')); } catch {} };
   useEffect(() => { fetchList(); }, []);
 
@@ -20,51 +30,84 @@ export default function NoticesPage() {
     try {
       setSubmitting(true);
       await api('/api/notices', { method: 'POST', body: JSON.stringify({ title, body }) });
-      setTitle('');
-      setBody('');
-      setOpen(false);
+      setTitle(''); setBody(''); setOpen(false);
       fetchList();
-    } catch {}
-    finally { setSubmitting(false); }
+    } catch {} finally { setSubmitting(false); }
   };
 
   return (
     <Shell>
-      <div className="grid gap-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold">Notices</h2>
-          {user?.role === 'admin' && (
-            <button className="btn-glow px-3 py-2 rounded" onClick={() => setOpen(true)}>Add Notice</button>
-          )}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="heading text-2xl">Society Notices</h2>
+          <p className="text-sm text-muted">Announcements from the management.</p>
         </div>
-
-        {open && user?.role === 'admin' && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => !submitting && setOpen(false)} />
-            <div className="relative z-50 w-full max-w-lg card p-5 border border-white/10 bg-white/5 rounded-xl">
-              <h3 className="font-medium mb-3">Post Notice</h3>
-              <form onSubmit={submit} className="grid gap-3">
-                <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} />
-                <textarea className="px-3 py-2 rounded bg-white/5 border border-white/10 min-h-[120px]" placeholder="Body" value={body} onChange={e=>setBody(e.target.value)} />
-                <div className="flex gap-2 justify-end">
-                  <button type="button" className="px-3 py-2 rounded border border-white/10 bg-white/5" onClick={() => setOpen(false)} disabled={submitting}>Cancel</button>
-                  <button className="btn-glow px-3 py-2 rounded" disabled={submitting || !title.trim() || !body.trim()}>{submitting ? 'Publishing…' : 'Publish'}</button>
-                </div>
-              </form>
-            </div>
-          </div>
+        {user?.role === 'admin' && (
+          <Button leftIcon={<Plus size={16} />} onClick={() => setOpen(true)}>Post Notice</Button>
         )}
-
-        <div className="grid gap-3">
-          {list.map(n => (
-            <div key={n._id} className="card p-4 border border-white/10 bg-white/5 rounded-xl">
-              <h3 className="font-medium">{n.title}</h3>
-              <p className="opacity-80 text-sm">{n.body}</p>
-            </div>
-          ))}
-          {!list.length && <p className="opacity-70">No notices yet.</p>}
-        </div>
       </div>
+
+      {list.length === 0 ? (
+        <EmptyState
+          icon={<Megaphone size={22} />}
+          title="No notices yet"
+          description={user?.role === 'admin' ? 'Post the first society update.' : 'Check back later for announcements.'}
+          action={user?.role === 'admin' ? <Button onClick={() => setOpen(true)} leftIcon={<Plus size={16} />}>Post Notice</Button> : undefined}
+        />
+      ) : (
+        <div className="grid md:grid-cols-2 gap-4">
+          {list.map((n, i) => (
+            <motion.div
+              key={n._id}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
+            >
+              <Card hoverable>
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-violet-500/10 text-violet-400 grid place-items-center flex-shrink-0">
+                    <Megaphone size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="heading text-base leading-tight">{n.title}</h3>
+                    <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{n.body}</p>
+                    <div className="flex items-center gap-3 mt-3 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar size={12} />
+                        {new Date(n.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                      {n.postedBy?.name && <span>by {n.postedBy.name}</span>}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        open={open}
+        onClose={() => !submitting && setOpen(false)}
+        title="Post New Notice"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={submitting}>Cancel</Button>
+            <Button onClick={submit} loading={submitting} disabled={!title.trim() || !body.trim()}>Publish</Button>
+          </>
+        }
+      >
+        <form onSubmit={submit} className="space-y-3">
+          <Input label="Title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Holiday notice, water shutdown…" />
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted">Message</label>
+            <textarea
+              className="input min-h-[120px]"
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              placeholder="Full details of the announcement…"
+            />
+          </div>
+        </form>
+      </Modal>
     </Shell>
   );
 }
