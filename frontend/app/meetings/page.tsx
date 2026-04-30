@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-  Calendar, Plus, MapPin, Clock, Users, Vote, X, ArrowRight, CircleSlash,
+  Calendar, Plus, MapPin, Clock, Users, Vote, X, ArrowRight,
+  Video, VideoOff, Hash, Sparkles, ShieldCheck, Wrench,
 } from 'lucide-react';
 import Shell from '../../components/Shell';
 import Card from '../../components/ui/Card';
@@ -12,6 +13,7 @@ import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
+import JitsiRoom from '../../components/JitsiRoom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -32,6 +34,16 @@ type Meeting = {
   status: 'Scheduled' | 'Live' | 'Ended' | 'Cancelled';
 };
 
+function generateRoomId() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+const QUICK_ROOMS: Array<{ name: string; desc: string; tone: 'blue' | 'teal' | 'amber'; icon: React.ComponentType<{ size?: number }> }> = [
+  { name: 'General',     desc: 'Open meeting room for all residents', tone: 'blue',  icon: Sparkles },
+  { name: 'Committee',   desc: 'Society committee discussions',       tone: 'teal',  icon: ShieldCheck },
+  { name: 'Maintenance', desc: 'Maintenance staff coordination',      tone: 'amber', icon: Wrench },
+];
+
 export default function MeetingsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -42,6 +54,13 @@ export default function MeetingsPage() {
     title: '', agenda: '', location: '', scheduledAt: '', durationMins: '60',
     motions: [''] as string[],
   });
+
+  const [roomName, setRoomName] = useState('');
+  const [activeRoom, setActiveRoom] = useState<string | null>(null);
+  const launchRoom = (room: string) => {
+    if (!room.trim()) return;
+    setActiveRoom(room.trim());
+  };
 
   const fetchList = async () => {
     try { setList(await api('/api/meetings')); } catch {}
@@ -73,15 +92,106 @@ export default function MeetingsPage() {
   const upcoming = list.filter(m => m.status === 'Scheduled' || m.status === 'Live');
   const past     = list.filter(m => m.status === 'Ended' || m.status === 'Cancelled');
 
+  if (activeRoom) {
+    return (
+      <Shell>
+        <Card>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Badge tone="emerald" dot>Live</Badge>
+                <h2 className="heading text-lg">Video Room: <span className="gradient-text">{activeRoom}</span></h2>
+              </div>
+              <p className="text-sm text-muted mt-1">Share this room name with others so they can join. Powered by meet.jit.si.</p>
+            </div>
+            <Button variant="danger" size="sm" leftIcon={<VideoOff size={14} />} onClick={() => setActiveRoom(null)}>
+              Leave Room
+            </Button>
+          </div>
+        </Card>
+        <JitsiRoom
+          roomId={activeRoom}
+          displayName={user?.name}
+          email={user?.email}
+          onLeave={() => setActiveRoom(null)}
+          height="calc(100vh - 220px)"
+        />
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="heading text-2xl">Society Meetings</h2>
-          <p className="text-sm text-muted">Upcoming meetings, agendas and live voting on motions.</p>
+          <p className="text-sm text-muted">Schedule meetings, vote on motions, and join live video rooms.</p>
         </div>
         {isAdmin && <Button leftIcon={<Plus size={16} />} onClick={() => setOpen(true)}>Schedule Meeting</Button>}
       </div>
+
+      {/* Ad-hoc video room */}
+      <Card>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 className="heading text-base flex items-center gap-2"><Video size={16} /> Start an instant video room</h3>
+            <p className="text-sm text-muted mt-0.5">Hop on a quick call without scheduling. Share the room name and others can join.</p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+            <input
+              type="text"
+              placeholder="Enter room name…"
+              value={roomName}
+              onChange={(e) => setRoomName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && launchRoom(roomName)}
+              className="input pl-9"
+            />
+          </div>
+          <Button onClick={() => launchRoom(roomName)} disabled={!roomName.trim()} leftIcon={<Video size={14} />}>
+            Join
+          </Button>
+          <Button
+            variant="ghost"
+            leftIcon={<Plus size={14} />}
+            onClick={() => {
+              const id = generateRoomId();
+              setRoomName(id);
+              launchRoom(id);
+            }}
+          >
+            New Room
+          </Button>
+        </div>
+
+        <div className="mt-4">
+          <div className="text-[11px] uppercase tracking-wider text-muted font-semibold mb-2">Quick rooms</div>
+          <div className="grid sm:grid-cols-3 gap-2">
+            {QUICK_ROOMS.map(r => {
+              const Icon = r.icon;
+              const tile =
+                r.tone === 'blue'  ? 'tile-blue'  :
+                r.tone === 'teal'  ? 'tile-teal'  :
+                                     'tile-amber';
+              return (
+                <button
+                  key={r.name}
+                  onClick={() => launchRoom(r.name)}
+                  className="text-left flex items-start gap-3 p-3 rounded-2xl bg-[var(--card)] border border-[var(--border-soft)] transition hover:-translate-y-0.5 hover:shadow-card-soft"
+                >
+                  <div className={`tile ${tile} h-9 w-9 shrink-0`}><Icon size={16} /></div>
+                  <div className="min-w-0">
+                    <div className="text-[13.5px] font-semibold">{r.name}</div>
+                    <div className="text-[11.5px] text-muted mt-0.5">{r.desc}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Card>
 
       {list.length === 0 ? (
         <EmptyState

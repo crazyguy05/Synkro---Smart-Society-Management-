@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import {
   Calendar, Clock, MapPin, Users, ArrowLeft, Check, X as XIcon, Minus,
   ThumbsUp, ThumbsDown, Hand, Plus, CircleSlash, Trash2, Play, Square,
+  Video, VideoOff,
 } from 'lucide-react';
 import Shell from '../../../components/Shell';
 import Card from '../../../components/ui/Card';
@@ -12,6 +13,7 @@ import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import Badge from '../../../components/ui/Badge';
 import Modal from '../../../components/ui/Modal';
+import JitsiRoom from '../../../components/JitsiRoom';
 import { api } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 
@@ -40,6 +42,7 @@ export default function MeetingDetailPage() {
   const [addMotionOpen, setAddMotionOpen] = useState(false);
   const [newMotion, setNewMotion] = useState({ title: '', description: '' });
   const [busy, setBusy] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
 
   const fetchOne = async () => {
     try { setM(await api(`/api/meetings/${id}`)); } catch {}
@@ -130,6 +133,41 @@ export default function MeetingDetailPage() {
             </div>
           )}
         </div>
+      </Card>
+
+      {/* Video room */}
+      <Card>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h3 className="heading text-base flex items-center gap-2"><Video size={16} /> Video Room</h3>
+            <p className="text-sm text-muted mt-1">
+              {videoOpen
+                ? 'Live now — share this meeting link with attendees.'
+                : 'Join this meeting as a video call. Powered by meet.jit.si.'}
+            </p>
+          </div>
+          {videoOpen ? (
+            <Button variant="danger" size="sm" leftIcon={<VideoOff size={14} />} onClick={() => setVideoOpen(false)}>
+              Leave Room
+            </Button>
+          ) : (
+            <Button size="sm" leftIcon={<Video size={14} />} onClick={() => setVideoOpen(true)}>
+              Join Video Room
+            </Button>
+          )}
+        </div>
+
+        {videoOpen && (
+          <div className="mt-4">
+            <JitsiRoom
+              roomId={`Meeting_${m._id}`}
+              displayName={user?.name}
+              email={user?.email}
+              onLeave={() => setVideoOpen(false)}
+              height="540px"
+            />
+          </div>
+        )}
       </Card>
 
       {/* RSVP */}
