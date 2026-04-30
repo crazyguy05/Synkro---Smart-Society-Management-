@@ -3,12 +3,12 @@ import { useEffect, useState } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
 export default function ThemeToggle() {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('theme');
-    const isDark = saved ? saved === 'dark' : true;
+    const isDark = saved ? saved === 'dark' : false;
     setDark(isDark);
     document.documentElement.classList.toggle('dark', isDark);
     setMounted(true);
@@ -26,11 +26,11 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition"
+      className="icon-btn"
       aria-label="Toggle theme"
       title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      {dark ? <Sun size={18} /> : <Moon size={18} />}
+      {dark ? <Sun size={17} strokeWidth={1.85} /> : <Moon size={17} strokeWidth={1.85} />}
     </button>
   );
 }
