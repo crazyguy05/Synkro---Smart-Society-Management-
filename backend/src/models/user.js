@@ -7,6 +7,7 @@ const UserSchema = new mongoose.Schema({
   phone: { type: String },
   role: { type: String, enum: ['admin', 'resident', 'guard', 'staff'], default: 'resident' },
   apartment: { type: String },
+  areaSqFt: { type: Number, default: 0 },
   password: { type: String, required: true, select: false },
   lastLoginAt: { type: Date, default: Date.now }
 }, { timestamps: true });

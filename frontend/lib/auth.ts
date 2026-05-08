@@ -2,11 +2,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from './api';
 
-type User = { id: string; name: string; role: 'admin'|'resident'|'guard'|'staff'; email: string };
+export type Role = 'admin' | 'resident' | 'guard' | 'staff';
+export type User = { id: string; name: string; role: Role; email: string };
 
 type Ctx = {
   user: User | null;
   token: string | null;
+  bootstrapping: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 };
@@ -16,13 +18,22 @@ const AuthContext = createContext<Ctx | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
 
   useEffect(() => {
-    const t = localStorage.getItem('token');
-    if (t) {
-      setToken(t);
-      api('/api/auth/me').then(r => setUser(r.user)).catch(() => {});
+    const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!t) {
+      setBootstrapping(false);
+      return;
     }
+    setToken(t);
+    api('/api/auth/me')
+      .then(r => setUser({ ...r.user, id: r.user.id ?? r.user._id }))
+      .catch(() => {
+        localStorage.removeItem('token');
+        setToken(null);
+      })
+      .finally(() => setBootstrapping(false));
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -40,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return React.createElement(
     AuthContext.Provider,
-    { value: { user, token, login, logout } },
+    { value: { user, token, bootstrapping, login, logout } },
     children
   );
 }

@@ -1,10 +1,11 @@
 import './globals.css';
 import React from 'react';
 import { AuthProvider } from '../lib/auth';
+import AuthGate from '../components/AuthGate';
 
 export const metadata = {
-  title: 'Smart Society OS',
-  description: 'Smart housing management system',
+  title: 'Synkro — Smart Society OS',
+  description: 'Residential society management platform',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -12,7 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body>
         <AuthProvider>
-          {children}
+          <AuthGate>{children}</AuthGate>
         </AuthProvider>
       </body>
     </html>

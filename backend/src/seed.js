@@ -24,10 +24,8 @@ async function run() {
   const guard = await User.create({ name: 'Guard One', email: 'guard@example.com', password: 'password', role: 'guard' });
   const staff = await User.create({ name: 'Staff One', email: 'staff@example.com', password: 'password', role: 'staff' });
 
-  await Bill.create([
-    { resident: resident1._id, month: '2025-10', maintenance: 1500, electricity: 900, water: 300, paid: false },
-    { resident: resident1._id, month: '2025-09', maintenance: 1500, electricity: 850, water: 300, paid: true },
-  ]);
+  await Bill.create({ resident: resident1._id, month: '2025-10', maintenance: 1500, electricity: 900, water: 300, paid: false });
+  await Bill.create({ resident: resident1._id, month: '2025-09', maintenance: 1500, electricity: 850, water: 300, paid: true });
 
   await Reward.create({ resident: resident1._id, points: 120, badges: ['On-Time Payer'] });
   await Notice.create({ title: 'Diwali Celebration', body: 'Join us at 7pm in the clubhouse.', postedBy: admin._id });

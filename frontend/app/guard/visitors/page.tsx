@@ -1,31 +1,29 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
+import { ShieldCheck, ImageIcon, Plus } from 'lucide-react';
 import Shell from '../../../components/Shell';
-import { api } from '../../../lib/api';
+import Card from '../../../components/ui/Card';
+import Input from '../../../components/ui/Input';
+import Button from '../../../components/ui/Button';
+import Badge, { statusTone } from '../../../components/ui/Badge';
+import EmptyState from '../../../components/ui/EmptyState';
+import { api, API_BASE } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 
-function statusBadge(s: string) {
-  const map: Record<string, string> = {
-    approved: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-    rejected: 'bg-red-500/20 text-red-300 border-red-500/30',
-    pending: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  };
-  return map[s] || map.pending;
-}
+type Visitor = {
+  _id: string; name: string; purpose?: string; reason?: string;
+  flatNumber?: string; status: string; photoUrl?: string; createdAt?: string;
+};
 
 export default function GuardVisitorsPage() {
   const { user } = useAuth();
-  const [list, setList] = useState<any[]>([]);
+  const [list, setList] = useState<Visitor[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    name: '',
-    purpose: '',
-    flatNumber: '',
-    residentEmail: '',
-    file: null as File | null,
-    photoUrl: '',
+    name: '', purpose: '', flatNumber: '', residentEmail: '',
+    file: null as File | null, photoUrl: '',
   });
-  const fileRef = useRef<HTMLInputElement|null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -34,101 +32,108 @@ export default function GuardVisitorsPage() {
     return () => clearInterval(id);
   }, [user]);
 
-  async function fetchList() {
+  const fetchList = async () => {
     try { setList(await api('/api/visitors')); } catch {}
-  }
-
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] || null;
-    setForm(prev => ({ ...prev, file: f }));
   };
 
-  async function uploadPhotoIfNeeded() {
+  const uploadPhotoIfNeeded = async () => {
     if (!form.file) return '';
     const fd = new FormData();
     fd.append('photo', form.file);
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000'}/api/visitors/upload`, {
+    const res = await fetch(`${API_BASE}/api/visitors/upload`, {
       method: 'POST',
       headers: typeof window !== 'undefined' && localStorage.getItem('token')
-        ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        : undefined,
+        ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : undefined,
       body: fd,
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     return data.photoUrl as string;
-  }
+  };
 
-  async function submit(e: React.FormEvent) {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.purpose || !form.flatNumber || !form.file) return;
     setLoading(true);
     try {
-      let photoUrl = form.photoUrl;
-      if (!photoUrl && form.file) photoUrl = await uploadPhotoIfNeeded();
-      await api('/api/visitors', { method: 'POST', body: JSON.stringify({
-        name: form.name,
-        purpose: form.purpose,
-        flatNumber: form.flatNumber || undefined,
-        residentEmail: form.residentEmail,
-        photoUrl,
-      })});
+      const photoUrl = form.photoUrl || (await uploadPhotoIfNeeded());
+      await api('/api/visitors', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name, purpose: form.purpose,
+          flatNumber: form.flatNumber || undefined,
+          residentEmail: form.residentEmail, photoUrl,
+        }),
+      });
       setForm({ name: '', purpose: '', flatNumber: '', residentEmail: '', file: null, photoUrl: '' });
       if (fileRef.current) fileRef.current.value = '';
       fetchList();
     } finally { setLoading(false); }
-  }
-
-  if (user?.role !== 'guard') {
-    return (
-      <Shell>
-        <div className="p-6">Only guards can access this page.</div>
-      </Shell>
-    );
-  }
+  };
 
   return (
     <Shell>
-      <div className="grid gap-6">
-        <div className="card p-4 border border-white/10 bg-white/5 rounded-xl">
-          <h2 className="font-semibold mb-3">Add Visitor</h2>
-          <form onSubmit={submit} className="grid gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Visitor Name" value={form.name} onChange={e=>setForm(f=>({ ...f, name: e.target.value }))} />
-              <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Purpose" value={form.purpose} onChange={e=>setForm(f=>({ ...f, purpose: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Flat Number (required)" value={form.flatNumber} onChange={e=>setForm(f=>({ ...f, flatNumber: e.target.value }))} />
-              <input className="px-3 py-2 rounded bg-white/5 border border-white/10" placeholder="Resident Email (optional)" value={form.residentEmail} onChange={e=>setForm(f=>({ ...f, residentEmail: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3 items-center">
-              <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="px-3 py-2 rounded bg-white/5 border border-white/10" />
-              <button className="btn-glow px-3 py-2 rounded" disabled={loading || !form.name || !form.purpose || !form.flatNumber || !form.file}>{loading ? 'Saving…' : 'Save Visitor'}</button>
-            </div>
-          </form>
-        </div>
+      <div>
+        <h2 className="heading text-2xl">Visitor Entry</h2>
+        <p className="text-sm text-muted">Log new visitors and track approvals in real time.</p>
+      </div>
 
-        <div className="card p-4 border border-white/10 bg-white/5 rounded-xl">
-          <h2 className="font-semibold mb-3">Recent Visitors</h2>
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-9 w-9 rounded-xl bg-brand-500/10 text-brand-400 grid place-items-center">
+            <Plus size={18} />
+          </div>
+          <h3 className="heading text-lg">Add Visitor</h3>
+        </div>
+        <form onSubmit={submit} className="grid gap-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <Input label="Visitor Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" />
+            <Input label="Purpose" value={form.purpose} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))} placeholder="Delivery, guest, maintenance…" />
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <Input label="Flat Number" value={form.flatNumber} onChange={e => setForm(f => ({ ...f, flatNumber: e.target.value }))} />
+            <Input label="Resident Email (optional)" value={form.residentEmail} onChange={e => setForm(f => ({ ...f, residentEmail: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted">Photo <span className="text-rose-400">(required)</span></label>
+            <input ref={fileRef} type="file" accept="image/*"
+              onChange={e => setForm(f => ({ ...f, file: e.target.files?.[0] || null }))}
+              className="input"
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button type="submit" loading={loading} disabled={!form.name || !form.purpose || !form.flatNumber || !form.file}>Save Visitor</Button>
+          </div>
+        </form>
+      </Card>
+
+      <div>
+        <h3 className="heading text-lg mb-3">Recent Visitors</h3>
+        {list.length === 0 ? (
+          <EmptyState icon={<ShieldCheck size={22} />} title="No visitors logged" description="Entries you add will appear here." />
+        ) : (
           <div className="grid gap-3">
             {list.map(v => (
-              <div key={v._id} className="p-3 rounded border border-white/10 bg-white/5 flex items-center gap-3">
-                {v.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.photoUrl} alt={v.name} className="w-16 h-16 object-cover rounded" />
-                ) : (
-                  <div className="w-16 h-16 rounded bg-white/10 flex items-center justify-center text-xs opacity-70">No Photo</div>
-                )}
-                <div className="flex-1">
-                  <div className="font-medium">{v.name}</div>
-                  <div className="text-xs opacity-70">Purpose: {v.purpose || v.reason || 'Visit'} • Flat: {v.flatNumber || '—'}</div>
+              <Card key={v._id}>
+                <div className="flex items-center gap-4">
+                  {v.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.photoUrl} alt={v.name} className="w-16 h-16 object-cover rounded-xl" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-[var(--card-muted)] grid place-items-center text-muted"><ImageIcon size={20} /></div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{v.name}</div>
+                    <div className="text-xs text-muted">
+                      {v.purpose || v.reason || 'Visit'} · Flat {v.flatNumber || '—'} · {v.createdAt ? new Date(v.createdAt).toLocaleString() : ''}
+                    </div>
+                  </div>
+                  <Badge tone={statusTone(v.status)}>{v.status}</Badge>
                 </div>
-                <span className={`px-2 py-1 rounded border ${statusBadge(v.status)}`}>{v.status}</span>
-              </div>
+              </Card>
             ))}
-            {list.length === 0 && <div className="opacity-70">No visitors yet.</div>}
           </div>
-        </div>
+        )}
       </div>
     </Shell>
   );

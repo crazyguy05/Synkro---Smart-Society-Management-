@@ -23,16 +23,23 @@ export const triggerPanic = async (req, res) => {
     }
 
     const client = twilio(sid, token);
+    // Support multiple numbers separated by comma
+    const numbers = to.split(',').map(n => n.trim()).filter(n => n);
+    
     if (mode === 'call') {
       const twiml = `<Response><Say voice="alice">${message}</Say></Response>`;
-      await client.calls.create({ from, to, twiml });
-      const payload = { success: true, mode: 'twilio_call', message: 'Emergency call placed' };
-      console.log('Panic call', { to, from, mode });
+      for (const num of numbers) {
+        await client.calls.create({ from, to: num, twiml });
+      }
+      const payload = { success: true, mode: 'twilio_call', message: `Emergency call placed to ${numbers.length} number(s)` };
+      console.log('Panic call', { to: numbers, from, mode });
       return res.json(payload);
     } else {
-      await client.messages.create({ from, to, body: message });
-      const payload = { success: true, mode: 'twilio_sms', message: 'Emergency SMS sent' };
-      console.log('Panic sms', { to, from, mode });
+      for (const num of numbers) {
+        await client.messages.create({ from, to: num, body: message });
+      }
+      const payload = { success: true, mode: 'twilio_sms', message: `Emergency SMS sent to ${numbers.length} number(s)` };
+      console.log('Panic sms', { to: numbers, from, mode });
       return res.json(payload);
     }
   } catch (e) {

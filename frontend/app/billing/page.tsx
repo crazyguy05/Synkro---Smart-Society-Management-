@@ -1,10 +1,23 @@
 "use client";
 import { useEffect, useMemo, useState } from 'react';
+import { Receipt, Wallet, AlertTriangle, CheckCircle2, CreditCard } from 'lucide-react';
 import Shell from '../../components/Shell';
+import Card from '../../components/ui/Card';
+import Badge, { statusTone } from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
+import EmptyState from '../../components/ui/EmptyState';
 import { api } from '../../lib/api';
 
+type Bill = {
+  _id: string; billId?: string; category: string;
+  amount: number; status: 'Paid' | 'Unpaid' | 'Overdue';
+  dueDate?: string; issueDate?: string; description?: string;
+};
+
 export default function BillingPage() {
-  const [bills, setBills] = useState<any[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [paying, setPaying] = useState<string | null>(null);
+
   const fetchBills = async () => { try { setBills(await api('/api/billing/me')); } catch {} };
   useEffect(() => { fetchBills(); }, []);
 
@@ -13,55 +26,94 @@ export default function BillingPage() {
     const paid = bills.filter(b => b.status === 'Paid').length;
     const overdue = bills.filter(b => b.status === 'Overdue').length;
     const unpaid = bills.filter(b => b.status === 'Unpaid').length;
-    const totalDue = bills
-      .filter(b => b.status !== 'Paid')
-      .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+    const totalDue = bills.filter(b => b.status !== 'Paid').reduce((s, b) => s + (+b.amount || 0), 0);
     return { total, paid, overdue, unpaid, totalDue };
   }, [bills]);
 
-  const badge = (s: string) => s === 'Paid' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : s === 'Overdue' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+  const markPaid = async (id: string) => {
+    setPaying(id);
+    try {
+      await api(`/api/billing/${id}/paid`, { method: 'PATCH' });
+      await fetchBills();
+    } catch {} finally { setPaying(null); }
+  };
 
   return (
     <Shell>
-      <div className="grid gap-6">
-        <div className="grid grid-cols-4 gap-3">
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Total</div><div className="text-2xl font-semibold">{stats.total}</div></div>
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Unpaid</div><div className="text-2xl font-semibold">{stats.unpaid}</div></div>
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Overdue</div><div className="text-2xl font-semibold">{stats.overdue}</div></div>
-          <div className="card p-4 border border-white/10 bg-white/5 rounded-xl"><div className="text-xs opacity-70">Total Due</div><div className="text-2xl font-semibold">₹{stats.totalDue}</div></div>
-        </div>
+      <div>
+        <h2 className="heading text-2xl">My Bills</h2>
+        <p className="text-sm text-muted">Track and settle your monthly dues.</p>
+      </div>
 
-        <div className="card p-4 border border-white/10 bg-white/5 rounded-xl">
-          <h2 className="font-semibold mb-3">My Bills</h2>
-          <div className="overflow-auto rounded border border-white/10">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <SummaryCard icon={<Wallet size={18} />} label="Total Due" value={`₹${stats.totalDue.toLocaleString('en-IN')}`} tone="brand" accent />
+        <SummaryCard icon={<AlertTriangle size={18} />} label="Overdue" value={stats.overdue} tone="rose" />
+        <SummaryCard icon={<Receipt size={18} />} label="Unpaid" value={stats.unpaid} tone="amber" />
+        <SummaryCard icon={<CheckCircle2 size={18} />} label="Paid" value={stats.paid} tone="emerald" />
+      </div>
+
+      {bills.length === 0 ? (
+        <EmptyState icon={<Receipt size={22} />} title="No bills" description="You're all caught up." />
+      ) : (
+        <Card className="p-0 overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-white/5">
+              <thead className="bg-[var(--card-muted)] text-muted text-xs uppercase tracking-wider">
                 <tr>
-                  <th className="text-left p-3">Bill ID</th>
-                  <th className="text-left p-3">Category</th>
-                  <th className="text-left p-3">Amount</th>
-                  <th className="text-left p-3">Due Date</th>
-                  <th className="text-left p-3">Status</th>
+                  <th className="text-left px-5 py-3">Bill ID</th>
+                  <th className="text-left px-5 py-3">Category</th>
+                  <th className="text-right px-5 py-3">Amount</th>
+                  <th className="text-left px-5 py-3">Due Date</th>
+                  <th className="text-left px-5 py-3">Status</th>
+                  <th className="text-right px-5 py-3">Action</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[var(--border)]">
                 {bills.map(b => (
-                  <tr key={b._id} className="border-t border-white/10">
-                    <td className="p-3">{b.billId || '—'}</td>
-                    <td className="p-3">{b.category || '—'}</td>
-                    <td className="p-3">₹{b.amount?.toFixed?.(2) ?? b.amount}</td>
-                    <td className="p-3">{b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '—'}</td>
-                    <td className="p-3"><span className={`px-2 py-1 rounded border ${badge(b.status)}`}>{b.status}</span></td>
+                  <tr key={b._id} className="hover:bg-white/5 transition">
+                    <td className="px-5 py-3 font-mono text-xs">{b.billId ?? '—'}</td>
+                    <td className="px-5 py-3 font-medium">{b.category}</td>
+                    <td className="px-5 py-3 text-right font-semibold">₹{(+b.amount).toLocaleString('en-IN')}</td>
+                    <td className="px-5 py-3 text-muted">{b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '—'}</td>
+                    <td className="px-5 py-3"><Badge tone={statusTone(b.status)}>{b.status}</Badge></td>
+                    <td className="px-5 py-3 text-right">
+                      {b.status !== 'Paid' && (
+                        <Button
+                          size="sm"
+                          leftIcon={<CreditCard size={13} />}
+                          loading={paying === b._id}
+                          onClick={() => markPaid(b._id)}
+                        >
+                          Pay
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {bills.length === 0 && (
-                  <tr><td className="p-4 opacity-70" colSpan={5}>No bills found.</td></tr>
-                )}
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
+        </Card>
+      )}
     </Shell>
+  );
+}
+
+function SummaryCard({ icon, label, value, tone, accent }: {
+  icon: React.ReactNode; label: string; value: React.ReactNode;
+  tone: 'brand' | 'emerald' | 'amber' | 'rose'; accent?: boolean;
+}) {
+  const toneBg: Record<string, string> = {
+    brand: 'bg-brand-500/10 text-brand-400',
+    emerald: 'bg-emerald-500/10 text-emerald-400',
+    amber: 'bg-amber-500/10 text-amber-400',
+    rose: 'bg-rose-500/10 text-rose-400',
+  };
+  return (
+    <div className={`card p-4 ${accent ? 'bg-gradient-to-br from-brand-500/10 to-accent-violet/10 border-brand-500/30' : ''}`}>
+      <div className={`h-9 w-9 rounded-xl grid place-items-center mb-3 ${toneBg[tone]}`}>{icon}</div>
+      <div className="text-xs text-muted">{label}</div>
+      <div className="heading text-2xl mt-0.5">{value}</div>
+    </div>
   );
 }

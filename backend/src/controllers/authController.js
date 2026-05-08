@@ -48,14 +48,56 @@ export const me = async (req, res) => {
   }
 };
 
+// Admin-only: create a user account
+export const createUser = async (req, res) => {
+  try {
+    const { name, email, password, role = 'resident', apartment, phone } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ message: 'Name, email and password required' });
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(400).json({ message: 'Email already in use' });
+    const user = await User.create({ name, email, password, role, apartment, phone });
+    return res.json({ user: { id: user._id, name: user.name, role: user.role, email: user.email, apartment: user.apartment } });
+  } catch (e) {
+    return res.status(500).json({ message: 'Failed to create user' });
+  }
+};
+
 // Admin-only: list users, optional role filter
 export const listUsers = async (req, res) => {
   try {
     const { role } = req.query;
     const q = role ? { role } : {};
-    const users = await User.find(q).select('name email role apartment');
+    const users = await User.find(q).select('name email role apartment areaSqFt');
     return res.json(users);
   } catch (e) {
     return res.status(500).json({ message: 'Failed to list users' });
+  }
+};
+
+// Any authenticated member: directory of staff/guards/admins for emergency contacts
+export const getDirectory = async (_req, res) => {
+  try {
+    const users = await User.find({ role: { $in: ['guard', 'staff', 'admin'] } })
+      .select('name email role phone apartment')
+      .sort({ role: 1, name: 1 });
+    return res.json(users);
+  } catch (e) {
+    return res.status(500).json({ message: 'Failed to load directory' });
+  }
+};
+
+// Admin-only: update user fields (e.g. areaSqFt, apartment)
+export const updateUser = async (req, res) => {
+  try {
+    const allowed = ['areaSqFt', 'apartment', 'phone'];
+    const update = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) update[key] = req.body[key];
+    }
+    const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json(user);
+  } catch (e) {
+    return res.status(500).json({ message: 'Failed to update user' });
   }
 };
