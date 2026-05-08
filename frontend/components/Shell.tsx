@@ -2,6 +2,7 @@
 import React from 'react';
 import Sidebar from './Sidebar';
 import ThemeToggle from './ThemeToggle';
+import QrPassModal from './qr-pass-modal';
 import { usePathname } from 'next/navigation';
 import { Bell, Search, ChevronDown } from 'lucide-react';
 import { useAuth } from '../lib/auth';
@@ -58,6 +59,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 style={{ boxShadow: '0 0 0 2px #F8FAFC' }}
               />
             </button>
+
+            <QrPassModal />
 
             <ThemeToggle />
 

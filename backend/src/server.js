@@ -20,6 +20,7 @@ import lostFoundRoutes from './routes/lostFound.js';
 import marketplaceRoutes from './routes/marketplace.js';
 import pollRoutes from './routes/polls.js';
 import meetingRoutes from './routes/meetings.js';
+import amenityRoutes from './routes/amenities.js';
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ app.use('/api/lostfound', lostFoundRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/polls', pollRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/amenities', amenityRoutes);
 
 const PORT = process.env.PORT || 5000;
 

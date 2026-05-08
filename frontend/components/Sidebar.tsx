@@ -33,6 +33,7 @@ export default function Sidebar() {
     resident: [
       { href: '/resident/complaints', label: 'Complaints', icon: MessageSquareWarning },
       { href: '/resident/visitors', label: 'Visitors', icon: UserCheck },
+      { href: '/amenities', label: 'Amenities', icon: Building2 },
       { href: '/billing', label: 'Billing', icon: Receipt },
       { href: '/resident/lost-found', label: 'Lost & Found', icon: Search },
       { href: '/resident/marketplace', label: 'Marketplace', icon: Store },
@@ -43,6 +44,8 @@ export default function Sidebar() {
       { href: '/admin/visitors', label: 'Visitors', icon: UserCheck },
       { href: '/admin/bills', label: 'Bills', icon: Receipt },
       { href: '/admin/polls', label: 'Manage Polls', icon: Vote },
+      { href: '/admin/amenities', label: 'Amenities', icon: Building2 },
+      { href: '/admin/residents', label: 'Residents', icon: UserCheck },
       { href: '/admin/marketplace', label: 'Marketplace', icon: Store },
       { href: '/ai', label: 'AI Suggest', icon: Sparkles },
     ],
